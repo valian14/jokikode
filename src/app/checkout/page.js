@@ -97,26 +97,25 @@ function FormCheckout() {
 
             if (data.token) {
                 window.snap.pay(data.token, {
-                    onSuccess: function (result) {
-                        // 1. Pesan yang akan dikirim ke WA-mu
-                        const pesan = `Halo Bang! Saya sudah bayar untuk paket ${paketTerpilih.nama}. Data saya:\n\nNama: ${formData.nama}\nNomor WA: ${formData.wa}\nDetail: ${formData.detail}\n\nTolong segera diproses ya!`;
-
-                        // 2. Ganti dengan nomor WhatsApp kamu (format internasional 62...)
-                        const noWa = "6287865927598";
-                        const urlWa = `https://wa.me/${noWa}?text=${encodeURIComponent(pesan)}`;
-
-                        // 3. Arahkan ke WhatsApp di tab baru
-                        window.open(urlWa, '_blank');
-
-                        alert("Mantap! Pembayaran berhasil. Silakan lanjut konfirmasi via WhatsApp.");
+                    onSuccess: function(result) {
+                        // 1. Siapkan nomor WA Admin (Gunakan format 62 tanpa + atau 0)
+                        const nomorAdmin = "6287865927598"; // GANTI DENGAN NOMOR WA KAMU
+                        
+                        // 2. Siapkan teks pesan otomatis
+                        const pesan = `Halo Admin JokiKode, saya sudah melunasi pembayaran!%0A%0AOrder ID: ${result.order_id}%0AMohon segera diproses ya.`;
+                        
+                        // 3. Arahkan browser pembeli ke link WhatsApp
+                        window.location.href = `https://wa.me/${nomorAdmin}?text=${pesan}`;
                     },
-                    onPending: function (result) {
-                        alert("Menunggu pembayaran...");
+                    onPending: function(result) {
+                        alert("Menunggu pembayaran Anda!");
                     },
-                    onError: function (result) {
+                    onError: function(result) {
                         alert("Pembayaran gagal!");
                     },
-                    onClose: function () { }
+                    onClose: function() {
+                        alert("Anda menutup halaman sebelum menyelesaikan pembayaran.");
+                    }
                 });
             } else {
                 alert("Gagal memuat pembayaran: " + data.error);
