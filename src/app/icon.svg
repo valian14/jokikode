@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Bayangan Hitam Tebal -->
+  <rect x="15" y="15" width="80" height="80" rx="16" fill="#1f2937" />
+  <!-- Kotak Utama Biru -->
+  <rect x="5" y="5" width="80" height="80" rx="16" fill="#93c5fd" stroke="#1f2937" stroke-width="6" />
+  <!-- Teks Terminal >_ -->
+  <text x="45" y="58" font-family="monospace" font-size="40" font-weight="900" fill="#1f2937" text-anchor="middle">&gt;_</text>
+</svg>
