@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from 'react';
-
+import Link from 'next/link';
 
 // Fungsi Fetch dengan Retry (Diletakkan di luar komponen agar tidak ter-recreate setiap render)
 const fetchWithRetry = async (url, options, maxRetries = 3) => {
@@ -175,6 +175,12 @@ export default function JokiKode() {
               <a href="#fitur" className="font-bold text-gray-700 hover:text-blue-600 transition-colors border-b-2 border-transparent hover:border-blue-600">Alasan</a>
               <a href="#ai-analyzer" className="font-bold text-gray-700 hover:text-blue-600 transition-colors border-b-2 border-transparent hover:border-blue-600">Bedah Soal</a>
               <a href="#harga" className="font-bold text-gray-700 hover:text-blue-600 transition-colors border-b-2 border-transparent hover:border-blue-600">Paket Harga</a>
+              
+              {/* Menu Cek Order Baru */}
+              <Link href="/cek-order" className="font-bold text-gray-700 hover:text-blue-600 transition-colors border-b-2 border-transparent hover:border-blue-600">
+                Cek Order 🔍
+              </Link>
+
               <a href="#harga" className="btn-sketch px-6 py-2 text-sm bg-blue-300">
                 Pesan Sekarang <i className="fa-solid fa-arrow-right ml-1"></i>
               </a>
@@ -208,6 +214,12 @@ export default function JokiKode() {
           <a href="#fitur" onClick={closeMobileMenu} className="block px-3 py-2 text-lg font-bold text-gray-900 border-l-4 border-transparent hover:border-blue-500 hover:bg-gray-100 transition-colors">Alasan</a>
           <a href="#ai-analyzer" onClick={closeMobileMenu} className="block px-3 py-2 text-lg font-bold text-gray-900 border-l-4 border-transparent hover:border-blue-500 hover:bg-gray-100 transition-colors">Bedah Soal</a>
           <a href="#harga" onClick={closeMobileMenu} className="block px-3 py-2 text-lg font-bold text-gray-900 border-l-4 border-transparent hover:border-blue-500 hover:bg-gray-100 transition-colors">Paket Harga</a>
+          
+          {/* Menu Cek Order Baru untuk Mobile */}
+          <Link href="/cek-order" onClick={closeMobileMenu} className="block px-3 py-2 text-lg font-bold text-gray-900 border-l-4 border-transparent hover:border-blue-500 hover:bg-gray-100 transition-colors">
+            Cek Order 🔍
+          </Link>
+
           <a href="#harga" onClick={closeMobileMenu} className="block mt-8 btn-sketch px-6 py-3 text-center text-sm bg-blue-300 w-full">
             Pesan Sekarang
           </a>
@@ -577,4 +589,3 @@ export default function JokiKode() {
     </div>
   );
 }
-

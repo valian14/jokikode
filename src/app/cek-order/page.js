@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 
 export default function CekOrderPage() {
   const [orderId, setOrderId] = useState('');
@@ -32,6 +33,14 @@ export default function CekOrderPage() {
   return (
     <div className="min-h-screen bg-[#fdfbf7] py-12 px-4">
       <div className="max-w-md mx-auto">
+        
+        {/* Tombol Kembali */}
+        <div className="mb-6">
+          <Link href="/" className="inline-flex items-center gap-2 font-bold text-gray-700 hover:text-blue-600 transition-colors">
+            <i className="fa-solid fa-arrow-left"></i> Kembali ke Beranda
+          </Link>
+        </div>
+
         {/* Header */}
         <h1 className="text-3xl font-black text-gray-900 mb-8 text-center">
           Cek Status Joki 🔍
