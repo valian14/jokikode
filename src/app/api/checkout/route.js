@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import midtransClient from 'midtrans-client';
 import { createClient } from '@supabase/supabase-js';
 
-// Simple in-memory rate limiter (Hanya untuk contoh, untuk skala besar gunakan Redis/Upstash)
+// Simple in-memory rate limiter
 const requestCounts = new Map();
 
 function isRateLimited(ip) {
@@ -20,17 +20,10 @@ function isRateLimited(ip) {
     return false;
 }
 
-// Pindahkan Katalog & Promo ke Backend sebagai sumber kebenaran (Source of Truth)
 const KATALOG_PAKET = {
     'hemat': 100000,
     'standar': 350000,
     'sultan': 600000
-};
-
-const DAFTAR_PROMO = {
-    'JOKIASIK10': 0.10,
-    'LULUSUKK': 50000,
-    'BEBAS5' : 0.05,
 };
 
 let snap = new midtransClient.Snap({
@@ -38,18 +31,18 @@ let snap = new midtransClient.Snap({
     serverKey: process.env.MIDTRANS_SERVER_KEY
 });
 
-// 1. Inisialisasi Supabase Backend
+// Inisialisasi Supabase Backend
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY; // Gunakan service_role key untuk backend
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(request) {
-    // 1. Ambil IP Address Client
     const ip = request.headers.get('x-forwarded-for') || 'unknown';
 
-    // 2. CEK RATE LIMIT
-    if (isRateLimited(ip))
+    // CEK RATE LIMIT
+    if (isRateLimited(ip)) {
         return NextResponse.json({ error: "Terlalu banyak permintaan. Tunggu 1 menit ya!" }, { status: 429 });
+    }
 
     try {
         const { orderId, paketId, kodePromo, nama, wa } = await request.json();
@@ -60,18 +53,23 @@ export async function POST(request) {
             return NextResponse.json({ error: "Paket tidak ditemukan atau dimanipulasi!" }, { status: 400 });
         }
 
-        // 2. HITUNG ULANG HARGA & PROMO DI SERVER
+        // 2. HITUNG ULANG HARGA MENGGUNAKAN PROMO DARI SUPABASE
         let hargaFinal = hargaAsli;
-        if (kodePromo && DAFTAR_PROMO[kodePromo.toUpperCase()]) {
-            const diskon = DAFTAR_PROMO[kodePromo.toUpperCase()];
-            if (diskon < 1) {
-                hargaFinal = hargaAsli - (hargaAsli * diskon);
-            } else {
-                hargaFinal = hargaAsli - diskon;
+        if (kodePromo) {
+            const { data: promoData, error: promoError } = await supabase
+                .from('promo')
+                .select('*')
+                .eq('kode', kodePromo.toUpperCase())
+                .single();
+
+            // Jika promo ada di database dan statusnya aktif, terapkan diskon
+            if (promoData && promoData.is_active) {
+                const diskonPersen = promoData.diskon / 100;
+                hargaFinal = hargaAsli - (hargaAsli * diskonPersen);
             }
         }
 
-        // 3. SIMPAN KE DATABASE SUPABASE DULU SEBELUM KE MIDTRANS <<< INI YANG DITAMBAHKAN
+        // 3. SIMPAN KE DATABASE SUPABASE 
         const { data: dbData, error: dbError } = await supabase
             .from('pesanan')
             .insert([
@@ -86,7 +84,6 @@ export async function POST(request) {
                 }
             ]);
 
-        // Jika gagal simpan ke database, batalkan transaksi dan beri tahu frontend
         if (dbError) {
             console.error("Database Error:", dbError);
             return NextResponse.json({ error: "Gagal menyimpan pesanan ke database" }, { status: 500 });

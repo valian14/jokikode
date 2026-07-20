@@ -3,21 +3,14 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Script from 'next/script';
+import { supabase } from '@/lib/supabase'; // Koneksi tunggal yang aman
 
-// 1. Katalog Resmi
 const KATALOG_PAKET = {
     'hemat': { nama: 'Tolongin Bang', harga: 100000 },
     'standar': { nama: 'Terima Beres', harga: 350000 },
     'sultan': { nama: 'Nilai A+', harga: 600000 }
 };
 
-const DAFTAR_PROMO = {
-    'JOKIASIK10': 0.10,
-    'LULUSUKK': 50000,
-    'BEBAS5': 0.05,
-};
-
-// Komponen Utama Checkout
 function FormCheckout() {
     const searchParams = useSearchParams();
     const paketUrl = searchParams.get('paket');
@@ -27,8 +20,10 @@ function FormCheckout() {
     const [promoTerpakai, setPromoTerpakai] = useState('');
     const [pesanDiskon, setPesanDiskon] = useState('');
     const [totalHarga, setTotalHarga] = useState(0);
-
     const [formData, setFormData] = useState({ nama: '', wa: '', detail: '' });
+
+    // STATE BARU: Mencegah tombol diklik berulang kali
+    const [isProcessing, setIsProcessing] = useState(false);
 
     useEffect(() => {
         if (paketUrl && KATALOG_PAKET[paketUrl]) {
@@ -37,48 +32,69 @@ function FormCheckout() {
         }
     }, [paketUrl]);
 
-    useEffect(() => {
+    // Fungsi Cek Promo Spesial
+    const handleCekPromo = async () => {
         if (!paketTerpilih) return;
 
-        const promo = kodePromo.toUpperCase();
-        const hargaAsli = paketTerpilih.harga;
+        // 1. Bersihkan input: Hapus SEMUA spasi/simbol, ambil murni HURUF & ANGKA saja
+        const inputBersih = kodePromo.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
 
-        if (promo === '') {
-            setTotalHarga(hargaAsli);
+        if (!inputBersih) {
+            setTotalHarga(paketTerpilih.harga);
             setPesanDiskon('');
             setPromoTerpakai('');
             return;
         }
 
-        if (DAFTAR_PROMO[promo]) {
-            const nilaiDiskon = DAFTAR_PROMO[promo];
-            if (nilaiDiskon < 1) {
-                setTotalHarga(hargaAsli - (hargaAsli * nilaiDiskon));
-                setPesanDiskon(`✅ Mantap! Diskon ${nilaiDiskon * 100}% otomatis diterapkan.`);
-            } else {
-                setTotalHarga(hargaAsli - nilaiDiskon);
-                setPesanDiskon(`✅ Hore! Potongan Rp ${nilaiDiskon.toLocaleString('id-ID')} berhasil.`);
-            }
-            setPromoTerpakai(promo);
-        } else {
-            setTotalHarga(hargaAsli);
-            setPromoTerpakai('');
-            if (promo.length > 4) {
-                setPesanDiskon('❌ Kode promo tidak valid.');
-            } else {
-                setPesanDiskon('');
+        // 2. Ambil data dari Supabase
+        const { data, error } = await supabase.from('promo').select('*');
+
+        if (error || !data) {
+            setPesanDiskon('❌ Gagal menghubungi database.');
+            return;
+        }
+
+        // 3. Pencarian Anti-Karakter-Gaib
+        let promoDitemukan = null;
+
+        for (let i = 0; i < data.length; i++) {
+            // Bersihkan juga data dari database agar 100% setara
+            const dbKodeBersih = String(data[i].kode).replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+
+            if (dbKodeBersih === inputBersih) {
+                promoDitemukan = data[i];
+                break; // Berhenti mencari jika sudah ketemu
             }
         }
-    }, [kodePromo, paketTerpilih]);
+
+        // 4. Eksekusi Hasilnya
+        if (!promoDitemukan) {
+            setTotalHarga(paketTerpilih.harga);
+            setPromoTerpakai('');
+            setPesanDiskon('❌ Kode promo tidak valid.');
+        } else if (promoDitemukan.is_active !== true) {
+            setTotalHarga(paketTerpilih.harga);
+            setPromoTerpakai('');
+            setPesanDiskon('❌ Kode promo sudah tidak aktif.');
+        } else {
+            const diskonPersen = promoDitemukan.diskon / 100;
+            setTotalHarga(paketTerpilih.harga - (paketTerpilih.harga * diskonPersen));
+            setPromoTerpakai(promoDitemukan.kode);
+            setPesanDiskon(`✅ Mantap! Diskon ${promoDitemukan.diskon}% diterapkan.`);
+        }
+    };
 
     const kirimPesanan = async (e) => {
         e.preventDefault();
         if (!paketTerpilih) return;
-
         if (!formData.wa) {
             alert("Nomor WhatsApp wajib diisi ya!");
             return;
         }
+
+        // Mencegah double click yang menyebabkan error snap.pay
+        if (isProcessing) return; 
+        setIsProcessing(true);
 
         try {
             const response = await fetch('/api/checkout', {
@@ -86,42 +102,32 @@ function FormCheckout() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     orderId: 'JOKI-' + Date.now(),
-                    paketId: paketUrl,            // Sudah pakai paketId
+                    paketId: paketUrl,
                     kodePromo: promoTerpakai,
                     nama: formData.nama,
-                    wa: formData.wa
+                    wa: formData.wa,
+                    totalHarga: totalHarga
                 })
             });
 
             const data = await response.json();
-
             if (data.token) {
                 window.snap.pay(data.token, {
-                    onSuccess: function(result) {
-                        // 1. Siapkan nomor WA Admin (Gunakan format 62 tanpa + atau 0)
-                        const nomorAdmin = "6287865927598"; // GANTI DENGAN NOMOR WA KAMU
-                        
-                        // 2. Siapkan teks pesan otomatis
+                    onSuccess: (result) => {
+                        const nomorAdmin = "6287865927598";
                         const pesan = `Halo Admin JokiKode, saya sudah melunasi pembayaran!%0A%0AOrder ID: ${result.order_id}%0AMohon segera diproses ya.`;
-                        
-                        // 3. Arahkan browser pembeli ke link WhatsApp
                         window.location.href = `https://wa.me/${nomorAdmin}?text=${pesan}`;
                     },
-                    onPending: function(result) {
-                        alert("Menunggu pembayaran Anda!");
-                    },
-                    onError: function(result) {
-                        alert("Pembayaran gagal!");
-                    },
-                    onClose: function() {
-                        alert("Anda menutup halaman sebelum menyelesaikan pembayaran.");
-                    }
+                    // Lepas status loading jika popup ditutup atau gagal agar tombol bisa diklik lagi
+                    onPending: function(result){ setIsProcessing(false); },
+                    onError: function(result){ setIsProcessing(false); },
+                    onClose: function(){ setIsProcessing(false); }
                 });
             } else {
                 alert("Gagal memuat pembayaran: " + data.error);
             }
         } catch (error) {
-            console.error("Error Midtrans:", error);
+            console.error(error);
             alert("Terjadi kesalahan server saat menghubungi Midtrans.");
         }
     };
@@ -140,30 +146,21 @@ function FormCheckout() {
 
     return (
         <div className="min-h-screen bg-[#fdfbf7] py-12 px-4 md:px-0">
+            <Script src="https://app.sandbox.midtrans.com/snap/snap.js" data-client-key={process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY} strategy="lazyOnload" />
 
-            <Script
-                src="https://app.sandbox.midtrans.com/snap/snap.js"
-                data-client-key={process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY}
-                strategy="lazyOnload"
-            />
-
-            {/* PERUBAHAN 1: Mengubah max-w-3xl menjadi max-w-xl agar di PC tidak terlalu lebar */}
             <div className="max-w-xl mx-auto">
                 <a href="/" className="inline-flex items-center gap-2 mb-8 font-bold hover:text-blue-600 transition-colors">
                     <i className="fa-solid fa-arrow-left"></i> Kembali
                 </a>
 
                 <div className="w-full">
-                    {/* Ukuran font judul sedikit disesuaikan untuk layar HP */}
                     <h1 className="text-3xl md:text-4xl font-black mb-6 md:mb-8 border-b-4 border-gray-900 pb-4">Formulir Pemesanan 🚀</h1>
 
                     <div className="bg-blue-50 border-4 border-gray-900 p-4 md:p-5 mb-8 rounded-xl shadow-[4px_4px_0_black]">
                         <p className="text-gray-600 font-bold mb-1">Paket Terpilih:</p>
                         <div className="flex justify-between items-center gap-2">
-                            {/* PERUBAHAN 2: text-xl untuk HP, text-2xl untuk PC agar tidak patah ke bawah */}
                             <h3 className="text-xl md:text-2xl font-black text-blue-600">{paketTerpilih.nama}</h3>
                             <div className="text-right">
-                                {/* PERUBAHAN 3: Ukuran harga dan memaksanya tetap 1 baris dengan text-nowrap */}
                                 <p className="text-xl md:text-3xl font-black text-nowrap">Rp {totalHarga.toLocaleString('id-ID')}</p>
                                 {totalHarga !== paketTerpilih.harga && (
                                     <p className="text-xs md:text-sm text-gray-500 line-through mt-1">Rp {paketTerpilih.harga.toLocaleString('id-ID')}</p>
@@ -176,7 +173,6 @@ function FormCheckout() {
                         <div className="space-y-4">
                             <div>
                                 <label className="block font-bold text-gray-900 mb-2">Nama Lengkap / Panggilan</label>
-                                {/* PERUBAHAN 4: Mengubah padding (p-4 menjadi p-3) agar input tidak terlalu gemuk */}
                                 <input type="text" required value={formData.nama} onChange={e => setFormData({ ...formData, nama: e.target.value })} className="w-full p-3 border-4 border-gray-900 rounded-xl bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all font-medium" placeholder="Misal: Budi Santoso" />
                             </div>
 
@@ -191,14 +187,23 @@ function FormCheckout() {
                             </div>
 
                             <div>
-                                <label className="block font-bold text-gray-900 mb-2">Punya Kode Diskon? (Opsional)</label>
-                                <input
-                                    type="text"
-                                    value={kodePromo}
-                                    onChange={e => setKodePromo(e.target.value)}
-                                    className="w-full p-3 border-4 border-gray-900 rounded-xl uppercase font-bold bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all"
-                                    placeholder="KETIK KODE PROMO..."
-                                />
+                                <label className="block font-bold text-gray-900 mb-2">Punya Kode Diskon?</label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={kodePromo}
+                                        onChange={e => setKodePromo(e.target.value)}
+                                        className="w-full p-3 border-4 border-gray-900 rounded-xl uppercase font-bold bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all"
+                                        placeholder="KETIK KODE..."
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleCekPromo}
+                                        className="bg-gray-900 text-white px-6 py-2 rounded-xl font-bold hover:bg-gray-800 transition-colors"
+                                    >
+                                        Cek
+                                    </button>
+                                </div>
                                 {pesanDiskon && <p className={`mt-2 text-sm font-bold ${pesanDiskon.includes('✅') ? 'text-green-600' : 'text-red-600'}`}>{pesanDiskon}</p>}
                             </div>
                         </div>
@@ -208,8 +213,16 @@ function FormCheckout() {
                             Pembayaran diproses aman via Midtrans
                         </p>
 
-                        <button type="submit" className="w-full bg-yellow-300 py-3 md:py-4 mt-4 font-black text-xl md:text-2xl border-4 border-gray-900 shadow-[6px_6px_0_black] hover:translate-y-1 hover:shadow-[3px_3px_0_black] active:translate-y-2 active:shadow-none transition-all rounded-xl">
-                            Bayar Sekarang
+                        <button 
+                            type="submit" 
+                            disabled={isProcessing}
+                            className={`w-full py-3 md:py-4 mt-4 font-black text-xl md:text-2xl border-4 border-gray-900 transition-all rounded-xl ${
+                                isProcessing 
+                                ? 'bg-gray-400 opacity-70 cursor-not-allowed shadow-[3px_3px_0_black] translate-y-1' 
+                                : 'bg-yellow-300 shadow-[6px_6px_0_black] hover:translate-y-1 hover:shadow-[3px_3px_0_black] active:translate-y-2 active:shadow-none'
+                            }`}
+                        >
+                            {isProcessing ? 'Memproses...' : 'Bayar Sekarang'}
                         </button>
                     </form>
                 </div>
