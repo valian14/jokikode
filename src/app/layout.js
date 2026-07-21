@@ -37,7 +37,7 @@ export default function RootLayout({ children }) {
     <html lang="id" className="scroll-smooth">
       <head>
         {/* Verifikasi Google Search Console */}
-        <meta name="google-site-verification" content="KODE_UNIK_DARI_GOOGLE_KAMU" />
+        <meta name="google-site-verification" content="2RICpC0xrJ4LuLhWhMzuE0c57lpn-sVtY27nxzWhqZA" />
         
         {/* Google Fonts */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
