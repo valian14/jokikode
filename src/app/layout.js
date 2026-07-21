@@ -1,12 +1,36 @@
 import './globals.css'
 
 export const metadata = {
-  title: 'JokiKode >_ Jasa Joki Coding UKK & TA SMK RPL',
-  description: 'Mentok sama bug atau pusing mikirin deadline Tugas Akhir dan UKK? JokiKode siap bantu kerjain aplikasi web, database, sampai tuntas. Solusi andalan anak SMK RPL!',
-  icons: {
-    icon: '/icon.svg', // Memastikan logo baru yang kita buat tadi terbaca
+  title: 'JokiKode - Jasa Joki Tugas Coding & UKK SMK Terpercaya',
+  description: 'Pusing mikirin tugas coding UKK atau TA? JokiKode siap bantu kerjain aplikasi lengkap dengan harga pelajar. Joki tugas coding Laravel, React, PHP, Node.js terpercaya.',
+  keywords: [
+    'jasa joki coding', 
+    'joki tugas it', 
+    'joki ukk rpl', 
+    'joki coding smk', 
+    'jasa pembuatan website tugas', 
+    'joki laravel', 
+    'joki react',
+    'joki tugas akhir it'
+  ],
+  authors: [{ name: 'JokiKode' }],
+  openGraph: {
+    title: 'JokiKode - Jasa Joki Tugas Coding & UKK SMK',
+    description: 'Biar urusan kodingan, database, dan error merah-merah kami yang kerjain. Fokus aja belajar presentasi!',
+    url: 'https://jokikode.vercel.app', // Ganti dengan domain aslimu nanti
+    siteName: 'JokiKode',
+    images: [
+      {
+        url: '/og-image.png', // Opsional: Buat gambar promosi ukuran 1200x630px, taruh di folder public dengan nama og-image.png
+        width: 1200,
+        height: 630,
+        alt: 'JokiKode Banner',
+      },
+    ],
+    locale: 'id_ID',
+    type: 'website',
   },
-}
+};
 
 export default function RootLayout({ children }) {
   return (

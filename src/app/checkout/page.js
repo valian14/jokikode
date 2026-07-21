@@ -22,6 +22,9 @@ function FormCheckout() {
     const [totalHarga, setTotalHarga] = useState(0);
     const [formData, setFormData] = useState({ nama: '', wa: '', detail: '' });
 
+    // STATE BARU: Custom Alert Modal
+    const [customAlert, setCustomAlert] = useState({ show: false, message: '', type: 'error' });
+
     // STATE BARU: Mencegah tombol diklik berulang kali
     const [isProcessing, setIsProcessing] = useState(false);
 
@@ -31,6 +34,11 @@ function FormCheckout() {
             setTotalHarga(KATALOG_PAKET[paketUrl].harga);
         }
     }, [paketUrl]);
+
+    // Fungsi untuk memanggil Custom Alert
+    const showAlert = (message, type = 'error') => {
+        setCustomAlert({ show: true, message, type });
+    };
 
     // Fungsi Cek Promo Spesial
     const handleCekPromo = async () => {
@@ -88,7 +96,7 @@ function FormCheckout() {
         e.preventDefault();
         if (!paketTerpilih) return;
         if (!formData.wa) {
-            alert("Nomor WhatsApp wajib diisi ya!");
+            showAlert("Nomor WhatsApp wajib diisi ya!");
             return;
         }
 
@@ -124,11 +132,13 @@ function FormCheckout() {
                     onClose: function(){ setIsProcessing(false); }
                 });
             } else {
-                alert("Gagal memuat pembayaran: " + data.error);
+                showAlert("Gagal memuat pembayaran: " + data.error);
+                setIsProcessing(false);
             }
         } catch (error) {
             console.error(error);
-            alert("Terjadi kesalahan server saat menghubungi Midtrans.");
+            showAlert("Terjadi kesalahan server saat menghubungi Midtrans.");
+            setIsProcessing(false);
         }
     };
 
@@ -147,6 +157,27 @@ function FormCheckout() {
     return (
         <div className="min-h-screen bg-[#fdfbf7] py-12 px-4 md:px-0">
             <Script src="https://app.sandbox.midtrans.com/snap/snap.js" data-client-key={process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY} strategy="lazyOnload" />
+
+            {/* KOMPONEN CUSTOM ALERT MODAL */}
+            {customAlert.show && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm">
+                    <div className="bg-white border-4 border-gray-900 p-6 md:p-8 rounded-2xl shadow-[8px_8px_0_black] max-w-sm w-full transform transition-all scale-100">
+                        <div className="text-center">
+                            <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full border-4 border-gray-900 mb-4 shadow-[4px_4px_0_black] ${customAlert.type === 'error' ? 'bg-red-400' : 'bg-green-400'}`}>
+                                <i className={`fa-solid ${customAlert.type === 'error' ? 'fa-triangle-exclamation' : 'fa-check'} text-3xl text-gray-900`}></i>
+                            </div>
+                            <h3 className="text-2xl font-black text-gray-900 mb-2">Tunggu Sebentar!</h3>
+                            <p className="text-gray-700 font-bold mb-6 leading-relaxed">{customAlert.message}</p>
+                            <button 
+                                onClick={() => setCustomAlert({ show: false, message: '', type: 'error' })}
+                                className="w-full bg-yellow-300 py-3 font-black text-lg border-4 border-gray-900 rounded-xl shadow-[4px_4px_0_black] hover:translate-y-1 hover:shadow-[2px_2px_0_black] active:translate-y-2 active:shadow-none transition-all"
+                            >
+                                Oke, Mengerti
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="max-w-xl mx-auto">
                 <a href="/" className="inline-flex items-center gap-2 mb-8 font-bold hover:text-blue-600 transition-colors">

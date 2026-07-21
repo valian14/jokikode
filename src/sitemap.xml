@@ -1,0 +1,17 @@
+export default function sitemap() {
+  return [
+    {
+      url: 'https://jokikode.vercel.app', // Halaman Utama
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 1, // Prioritas tertinggi
+    },
+    {
+      url: 'https://jokikode.vercel.app/cek-order', // Halaman Cek Order
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+    // Halaman admin sengaja TIDAK dimasukkan ke sini
+  ]
+}
