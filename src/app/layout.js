@@ -17,11 +17,11 @@ export const metadata = {
   openGraph: {
     title: 'JokiKode - Jasa Joki Tugas Coding & UKK SMK',
     description: 'Biar urusan kodingan, database, dan error merah-merah kami yang kerjain. Fokus aja belajar presentasi!',
-    url: 'https://jokikode.vercel.app', // Ganti dengan domain aslimu nanti
+    url: 'https://jokikode.vercel.app',
     siteName: 'JokiKode',
     images: [
       {
-        url: '/og-image.png', // Opsional: Buat gambar promosi ukuran 1200x630px, taruh di folder public dengan nama og-image.png
+        url: '/og-image.png',
         width: 1200,
         height: 630,
         alt: 'JokiKode Banner',
@@ -36,6 +36,9 @@ export default function RootLayout({ children }) {
   return (
     <html lang="id" className="scroll-smooth">
       <head>
+        {/* Verifikasi Google Search Console */}
+        <meta name="google-site-verification" content="KODE_UNIK_DARI_GOOGLE_KAMU" />
+        
         {/* Google Fonts */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
