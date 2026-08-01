@@ -175,7 +175,7 @@ export default function JokiKode() {
               <a href="#fitur" className="font-bold text-gray-700 hover:text-blue-600 transition-colors border-b-2 border-transparent hover:border-blue-600">Alasan</a>
               <a href="#ai-analyzer" className="font-bold text-gray-700 hover:text-blue-600 transition-colors border-b-2 border-transparent hover:border-blue-600">Bedah Soal</a>
               <a href="#harga" className="font-bold text-gray-700 hover:text-blue-600 transition-colors border-b-2 border-transparent hover:border-blue-600">Paket Harga</a>
-              
+
               {/* Menu Cek Order Baru */}
               <Link href="/cek-order" className="font-bold text-gray-700 hover:text-blue-600 transition-colors border-b-2 border-transparent hover:border-blue-600">
                 Cek Order 🔍
@@ -214,7 +214,7 @@ export default function JokiKode() {
           <a href="#fitur" onClick={closeMobileMenu} className="block px-3 py-2 text-lg font-bold text-gray-900 border-l-4 border-transparent hover:border-blue-500 hover:bg-gray-100 transition-colors">Alasan</a>
           <a href="#ai-analyzer" onClick={closeMobileMenu} className="block px-3 py-2 text-lg font-bold text-gray-900 border-l-4 border-transparent hover:border-blue-500 hover:bg-gray-100 transition-colors">Bedah Soal</a>
           <a href="#harga" onClick={closeMobileMenu} className="block px-3 py-2 text-lg font-bold text-gray-900 border-l-4 border-transparent hover:border-blue-500 hover:bg-gray-100 transition-colors">Paket Harga</a>
-          
+
           {/* Menu Cek Order Baru untuk Mobile */}
           <Link href="/cek-order" onClick={closeMobileMenu} className="block px-3 py-2 text-lg font-bold text-gray-900 border-l-4 border-transparent hover:border-blue-500 hover:bg-gray-100 transition-colors">
             Cek Order 🔍
@@ -458,7 +458,7 @@ export default function JokiKode() {
               <h3 className="text-2xl font-black mb-2">Tolongin Bang</h3>
               <p className="text-gray-600 text-sm mb-6 font-medium border-b-2 border-dashed border-gray-300 pb-4">Cocok untuk project UKK skala kecil / sederhana.</p>
 
-              <div className="text-4xl font-black mb-6">Mulai 100k<span className="text-lg text-gray-500 font-medium">/app</span></div>
+              <div className="text-4xl font-black mb-6">Mulai 75k<span className="text-lg text-gray-500 font-medium">/app</span></div>
 
               <ul className="space-y-4 mb-8 font-medium">
                 <li className="flex items-start gap-3">
@@ -494,7 +494,7 @@ export default function JokiKode() {
               <h3 className="text-3xl font-black mb-2">Terima Beres</h3>
               <p className="text-gray-700 text-sm mb-6 font-bold border-b-2 border-dashed border-gray-400 pb-4">Paket paling aman untuk standar lulus UKK.</p>
 
-              <div className="text-4xl font-black mb-6">Mulai 350k<span className="text-lg text-gray-700 font-medium">/app</span></div>
+              <div className="text-4xl font-black mb-6">Mulai 250k<span className="text-lg text-gray-700 font-medium">/app</span></div>
 
               <ul className="space-y-4 mb-8 font-bold">
                 <li className="flex items-start gap-3">
@@ -526,7 +526,7 @@ export default function JokiKode() {
               <h3 className="text-2xl font-black mb-2">Nilai A+</h3>
               <p className="text-gray-600 text-sm mb-6 font-medium border-b-2 border-dashed border-gray-300 pb-4">Untuk yang ngincer nilai sempurna & UI mewah.</p>
 
-              <div className="text-4xl font-black mb-6">Mulai 600k<span className="text-lg text-gray-500 font-medium">/app</span></div>
+              <div className="text-4xl font-black mb-6">Mulai 400k<span className="text-lg text-gray-500 font-medium">/app</span></div>
 
               <ul className="space-y-4 mb-8 font-medium">
                 <li className="flex items-start gap-3">
