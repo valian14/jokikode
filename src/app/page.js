@@ -1,5 +1,7 @@
 "use client";
 import React, { useState } from 'react';
+import { useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
 // Fungsi Fetch dengan Retry (Diletakkan di luar komponen agar tidak ter-recreate setiap render)
@@ -93,6 +95,37 @@ export default function JokiKode() {
     }
   };
 
+  const handleScroll = (e, id, path) => {
+    e.preventDefault();
+
+    const element = document.getElementById(id);
+    if (element) {
+      // 1. Gulir mulus ke elemen tujuan
+      element.scrollIntoView({ behavior: 'smooth' });
+
+      // 2. Ubah URL di address bar (tanpa reload dan tanpa #)
+      window.history.pushState(null, '', `/${path}`);
+    }
+  };
+
+  const pathname = usePathname();
+
+  useEffect(() => {
+    // 1. Ambil kata setelah garis miring. Contoh: '/fitur' bakal jadi 'fitur'
+    const idDariUrl = pathname.replace('/', ''); 
+
+    // 2. Kalau ada isinya (bukan halaman utama '/'), cari elemennya
+    if (idDariUrl) {
+      const element = document.getElementById(idDariUrl);
+      if (element) {
+        // 3. Kasih jeda dikit (100ms) biar HTML-nya selesai di-render semua, baru gulir
+        setTimeout(() => {
+          element.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+      }
+    }
+  }, [pathname]);
+
   return (
     <div className="paper-bg antialiased selection:bg-yellow-300 selection:text-black min-h-screen">
 
@@ -167,21 +200,25 @@ export default function JokiKode() {
           <div className="flex justify-between items-center h-20">
             <div className="flex-shrink-0 flex items-center gap-2 group">
               <i className="fa-solid fa-terminal text-3xl text-blue-600 transform -rotate-12 group-hover:rotate-0 transition-transform duration-300"></i>
-              <span className="font-handwriting text-4xl font-bold text-gray-900 tracking-wide">JokiKode.</span>
+              <span className="font-handwriting text-4xl font-bold text-gray-900 tracking-wide">JokiKode.id</span>
             </div>
 
             {/* Desktop Menu */}
             <div className="hidden md:flex items-center space-x-8">
-              <a href="#fitur" className="font-bold text-gray-700 hover:text-blue-600 transition-colors border-b-2 border-transparent hover:border-blue-600">Alasan</a>
-              <a href="#ai-analyzer" className="font-bold text-gray-700 hover:text-blue-600 transition-colors border-b-2 border-transparent hover:border-blue-600">Bedah Soal</a>
-              <a href="#harga" className="font-bold text-gray-700 hover:text-blue-600 transition-colors border-b-2 border-transparent hover:border-blue-600">Paket Harga</a>
+              <a href="#fitur" onClick={(e) => handleScroll(e, 'fitur', 'fitur')}
+                className="font-bold hover:text-blue-600 cursor-pointer">Alasan</a>
+              <a href="#ai-analyzer" onClick={(e) => handleScroll(e, 'ai-analyzer', 'ai-analyzer')}
+                className="font-bold hover:text-blue-600 cursor-pointer">Bedah Soal</a>
+              <a href="#paket-harga" onClick={(e) => handleScroll(e, 'paket-harga', 'paket-harga')}
+                className="font-bold hover:text-blue-600 cursor-pointer">Paket Harga</a>
 
               {/* Menu Cek Order Baru */}
               <Link href="/cek-order" className="font-bold text-gray-700 hover:text-blue-600 transition-colors border-b-2 border-transparent hover:border-blue-600">
                 Cek Order 🔍
               </Link>
 
-              <a href="#harga" className="btn-sketch px-6 py-2 text-sm bg-blue-300">
+              <a href="#paket-harga" onClick={(e) => handleScroll(e, 'paket-harga', 'paket-harga')}
+                className="font-bold hover:text-blue-600 cursor-pointer">
                 Pesan Sekarang <i className="fa-solid fa-arrow-right ml-1"></i>
               </a>
             </div>
@@ -431,7 +468,7 @@ export default function JokiKode() {
       </section>
 
       {/* Pricing Section */}
-      <section id="harga" className="py-24 relative">
+      <section id="paket-harga" className="py-24 relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-10">
             <h2 className="text-4xl font-extrabold mb-4 uppercase">Pilih Paket <span className="bg-blue-300 px-2 border-2 border-black rotate-1 inline-block shadow-[2px_2px_0px_black]">Joki</span></h2>
@@ -526,7 +563,7 @@ export default function JokiKode() {
               <h3 className="text-2xl font-black mb-2">Nilai A+</h3>
               <p className="text-gray-600 text-sm mb-6 font-medium border-b-2 border-dashed border-gray-300 pb-4">Untuk yang ngincer nilai sempurna & UI mewah.</p>
 
-              <div className="text-4xl font-black mb-6">Mulai 400k<span className="text-lg text-gray-500 font-medium">/app</span></div>
+              <div className="text-4xl font-black mb-6">Mulai 350k<span className="text-lg text-gray-500 font-medium">/app</span></div>
 
               <ul className="space-y-4 mb-8 font-medium">
                 <li className="flex items-start gap-3">

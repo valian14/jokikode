@@ -1,111 +1,88 @@
 import { NextResponse } from 'next/server';
-import midtransClient from 'midtrans-client';
-import { createClient } from '@supabase/supabase-js';
-
-// Simple in-memory rate limiter
-const requestCounts = new Map();
-
-function isRateLimited(ip) {
-    const now = Date.now();
-    const windowMs = 60 * 1000; // 1 menit
-    const limit = 5; // Maksimal 5 permintaan per menit
-
-    const userRequests = requestCounts.get(ip) || [];
-    const recentRequests = userRequests.filter(timestamp => now - timestamp < windowMs);
-
-    if (recentRequests.length >= limit) return true;
-
-    recentRequests.push(now);
-    requestCounts.set(ip, recentRequests);
-    return false;
-}
-
-const KATALOG_PAKET = {
-    'hemat': 100000,
-    'standar': 350000,
-    'sultan': 600000
-};
-
-let snap = new midtransClient.Snap({
-    isProduction: false,
-    serverKey: process.env.MIDTRANS_SERVER_KEY
-});
-
-// Inisialisasi Supabase Backend
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_KEY; // Gunakan service_role key untuk backend
-const supabase = createClient(supabaseUrl, supabaseKey);
+import crypto from 'crypto';
 
 export async function POST(request) {
-    const ip = request.headers.get('x-forwarded-for') || 'unknown';
+  try {
+    // 1. Tangkap data dari frontend
+    const body = await request.json();
+    
+    // 🔥 method udah gak perlu ditangkep lagi
+    const { amount, orderId, nama, paketNama } = body; 
+    
+    const finalAmount = Number(amount);
 
-    // CEK RATE LIMIT
-    if (isRateLimited(ip)) {
-        return NextResponse.json({ error: "Terlalu banyak permintaan. Tunggu 1 menit ya!" }, { status: 429 });
+    if (!finalAmount || finalAmount <= 0) {
+       throw new Error("Waduh ngab, harganya 0 atau gak kebaca nih!");
     }
 
-    try {
-        const { orderId, paketId, kodePromo, nama, wa } = await request.json();
+    // Ambil waktu saat ini dalam format Unix (detik) untuk Timestamp Header
+    const waktuSekarang = Math.floor(Date.now() / 1000); 
 
-        // 1. VALIDASI PAKET
-        const hargaAsli = KATALOG_PAKET[paketId];
-        if (!hargaAsli) {
-            return NextResponse.json({ error: "Paket tidak ditemukan atau dimanipulasi!" }, { status: 400 });
-        }
+    // 🔥 SIAPIN LINK WHATSAPP BUAT REDIRECT
+    // (Nomornya udah gue sesuaikan sama yang ada di profile lu tadi)
+    const nomorWA = "6287865927598"; 
+    const pesan = `Halo Admin JokiKode, pesanan saya sudah dibayar ya!%0A%0AOrder ID: ${orderId}%0AMohon segera diproses.`;
+    const linkWA = `https://wa.me/${nomorWA}?text=${pesan}`;
 
-        // 2. HITUNG ULANG HARGA MENGGUNAKAN PROMO DARI SUPABASE
-        let hargaFinal = hargaAsli;
-        if (kodePromo) {
-            const { data: promoData, error: promoError } = await supabase
-                .from('promo')
-                .select('*')
-                .eq('kode', kodePromo.toUpperCase())
-                .single();
+    // 2. Siapkan Body JSON (Mode Checkout / Bebas Milih Bank)
+    const payload = {
+      amount: finalAmount, 
+      currency: "IDR",
+      reference: orderId,
+      redirectUrl: linkWA, // 🔥 Pelanggan dilempar ke WA abis lunas
+      metadata: { // 🔥 TAMBAHIN BLOK METADATA INI BIAR POPUP HILANG
+        order_name: `Paket Joki: ${paketNama || 'Custom'}`,
+        customer_name: nama || 'Klien JokiKode'
+      }
+    };
 
-            // Jika promo ada di database dan statusnya aktif, terapkan diskon
-            if (promoData && promoData.is_active) {
-                const diskonPersen = promoData.diskon / 100;
-                hargaFinal = hargaAsli - (hargaAsli * diskonPersen);
-            }
-        }
+    const jsonString = JSON.stringify(payload);
 
-        // 3. SIMPAN KE DATABASE SUPABASE 
-        const { data: dbData, error: dbError } = await supabase
-            .from('pesanan')
-            .insert([
-                {
-                    order_id: orderId,
-                    nama_klien: nama,
-                    wa_klien: wa,
-                    paket_id: paketId,
-                    kode_promo: kodePromo || null,
-                    total_harga: hargaFinal,
-                    status: 'PENDING'
-                }
-            ]);
+    // 3. Bikin Timestamp (Unix) untuk Header Signature
+    const timestamp = waktuSekarang.toString();
 
-        if (dbError) {
-            console.error("Database Error:", dbError);
-            return NextResponse.json({ error: "Gagal menyimpan pesanan ke database" }, { status: 500 });
-        }
+    // 4. Bikin Signature Input persis kayak di dokumentasi
+    const signatureInput = `${timestamp}.${jsonString}`;
 
-        // 4. BUAT TRANSAKSI MIDTRANS
-        let parameter = {
-            "transaction_details": {
-                "order_id": orderId,
-                "gross_amount": hargaFinal 
-            },
-            "customer_details": {
-                "first_name": nama,
-                "phone": wa
-            }
-        };
+    // 5. Enkripsi pakai HMAC-SHA256 (Pake API Key dari .env)
+    const apiKey = process.env.DOMPETX_API_KEY; 
+    const signature = crypto
+      .createHmac('sha256', apiKey)
+      .update(signatureInput)
+      .digest('hex');
 
-        const transaction = await snap.createTransaction(parameter);
-        return NextResponse.json({ token: transaction.token });
+    // 6. Tembak API-nya DompetX (🔥 ENDPOINT UDAH DIGANTI KE CHECKOUT)
+    const dompetxUrl = 'https://api.dompetx.com/v1/payments/checkout'; 
 
-    } catch (error) {
-        console.error("Server Error:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    const response = await fetch(dompetxUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-DOMPAY-API-Key': apiKey,
+        'X-DOMPAY-Signature': signature,
+        'X-DOMPAY-Timestamp': timestamp,
+        'Idempotency-Key': orderId // Pake order ID biar ga dobel bayar
+      },
+      body: jsonString
+    });
+
+    const responseData = await response.json();
+
+    if (!response.ok) {
+      throw new Error(responseData.message || 'Gagal bikin transaksi di DompetX');
     }
+
+    // 7. Balikin datanya ke Frontend
+    return NextResponse.json({ 
+      success: true, 
+      paymentData: responseData 
+    });
+
+  } catch (error) {
+    console.error("Error Payment DompetX:", error);
+    return NextResponse.json(
+      { success: false, message: error.message },
+      { status: 500 }
+    );
+  }
 }

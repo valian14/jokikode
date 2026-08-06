@@ -2,7 +2,28 @@
 const nextConfig = {
   /* config options here */
   reactCompiler: true,
-  
+
+  // 🔥 TAMBAH BLOK REWRITES DI SINI BIAR GAK 404 PAS DI-REFRESH
+  async rewrites() {
+    return [
+      {
+        source: '/fitur',
+        destination: '/', // Balikin ke halaman utama diem-diem
+      },
+      {
+        source: '/ai-analyzer',
+        destination: '/', // Balikin ke halaman utama diem-diem
+      },
+      {
+        source: '/paket-harga',
+        destination: '/', // Balikin ke halaman utama diem-diem
+      },
+      // Kalau mau bikin custom URL buat menu lain, tambahin juga di bawah sini. Contoh:
+      // { source: '/alasan', destination: '/' },
+      // { source: '/bedah-soal', destination: '/' },
+    ];
+  },
+
   async headers() {
     return [{
       source: '/:path*',

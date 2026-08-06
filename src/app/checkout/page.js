@@ -2,13 +2,12 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Script from 'next/script';
 import { supabase } from '@/lib/supabase'; // Koneksi tunggal yang aman
 
 const KATALOG_PAKET = {
-    'hemat': { nama: 'Tolongin Bang', harga: 100000 },
-    'standar': { nama: 'Terima Beres', harga: 350000 },
-    'sultan': { nama: 'Nilai A+', harga: 600000 }
+    'hemat': { nama: 'Tolongin Bang', harga: 75000 },
+    'standar': { nama: 'Terima Beres', harga: 250000 },
+    'sultan': { nama: 'Nilai A+', harga: 350000 }
 };
 
 function FormCheckout() {
@@ -22,10 +21,9 @@ function FormCheckout() {
     const [totalHarga, setTotalHarga] = useState(0);
     const [formData, setFormData] = useState({ nama: '', wa: '', detail: '' });
 
-    // STATE BARU: Custom Alert Modal
-    const [customAlert, setCustomAlert] = useState({ show: false, message: '', type: 'error' });
+    // 🔥 Baris metodeBayar udah gue hapus karena udah gak kepake
 
-    // STATE BARU: Mencegah tombol diklik berulang kali
+    const [customAlert, setCustomAlert] = useState({ show: false, message: '', type: 'error' });
     const [isProcessing, setIsProcessing] = useState(false);
 
     useEffect(() => {
@@ -35,18 +33,13 @@ function FormCheckout() {
         }
     }, [paketUrl]);
 
-    // Fungsi untuk memanggil Custom Alert
     const showAlert = (message, type = 'error') => {
         setCustomAlert({ show: true, message, type });
     };
 
-    // Fungsi Cek Promo Spesial
     const handleCekPromo = async () => {
         if (!paketTerpilih) return;
-
-        // 1. Bersihkan input: Hapus SEMUA spasi/simbol, ambil murni HURUF & ANGKA saja
         const inputBersih = kodePromo.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-
         if (!inputBersih) {
             setTotalHarga(paketTerpilih.harga);
             setPesanDiskon('');
@@ -54,28 +47,21 @@ function FormCheckout() {
             return;
         }
 
-        // 2. Ambil data dari Supabase
         const { data, error } = await supabase.from('promo').select('*');
-
         if (error || !data) {
             setPesanDiskon('❌ Gagal menghubungi database.');
             return;
         }
 
-        // 3. Pencarian Anti-Karakter-Gaib
         let promoDitemukan = null;
-
         for (let i = 0; i < data.length; i++) {
-            // Bersihkan juga data dari database agar 100% setara
             const dbKodeBersih = String(data[i].kode).replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-
             if (dbKodeBersih === inputBersih) {
                 promoDitemukan = data[i];
-                break; // Berhenti mencari jika sudah ketemu
+                break;
             }
         }
 
-        // 4. Eksekusi Hasilnya
         if (!promoDitemukan) {
             setTotalHarga(paketTerpilih.harga);
             setPromoTerpakai('');
@@ -99,45 +85,70 @@ function FormCheckout() {
             showAlert("Nomor WhatsApp wajib diisi ya!");
             return;
         }
-
-        // Mencegah double click yang menyebabkan error snap.pay
-        if (isProcessing) return; 
+        if (isProcessing) return;
         setIsProcessing(true);
 
+        // 1. Bikin Order ID di awal biar konsisten buat DompetX dan Database
+        const currentOrderId = 'JOKI-' + Date.now();
+
         try {
+            // Tembak API DompetX buat minta Link Pembayaran
             const response = await fetch('/api/checkout', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    orderId: 'JOKI-' + Date.now(),
+                    orderId: currentOrderId,
                     paketId: paketUrl,
+                    paketNama: paketTerpilih.nama,
                     kodePromo: promoTerpakai,
                     nama: formData.nama,
                     wa: formData.wa,
-                    totalHarga: totalHarga
+                    amount: totalHarga
                 })
             });
 
             const data = await response.json();
-            if (data.token) {
-                window.snap.pay(data.token, {
-                    onSuccess: (result) => {
-                        const nomorAdmin = "6287865927598";
-                        const pesan = `Halo Admin JokiKode, saya sudah melunasi pembayaran!%0A%0AOrder ID: ${result.order_id}%0AMohon segera diproses ya.`;
-                        window.location.href = `https://wa.me/${nomorAdmin}?text=${pesan}`;
-                    },
-                    // Lepas status loading jika popup ditutup atau gagal agar tombol bisa diklik lagi
-                    onPending: function(result){ setIsProcessing(false); },
-                    onError: function(result){ setIsProcessing(false); },
-                    onClose: function(){ setIsProcessing(false); }
-                });
+
+            if (data.success && data.paymentData) {
+                const paymentUrl = data.paymentData.payment_url;
+
+                if (paymentUrl) {
+
+                    // 2. 🔥 SIMPAN KE DATABASE (SUPABASE) SEBELUM REDIRECT
+                    // Sesuaikan nama kolom ('id_pesanan', 'nama', dll) sama tabel di Supabase lu ya ngab!
+                    const { error: dbError } = await supabase.from('pesanan').insert([{
+                        order_id: currentOrderId,
+                        nama_klien: formData.nama,
+                        wa_klien: formData.wa,
+                        paket_id: paketUrl, // nyimpen 'hemat', 'standar', atau 'sultan'
+                        kode_promo: promoTerpakai || null, // Kasih null kalau kosong
+                        total_harga: totalHarga,
+                        status: 'PENDING' // Set otomatis jadi PENDING
+                    }]);
+
+                    if (dbError) {
+                        console.error("Gagal simpan ke DB:", dbError);
+                        showAlert("Sistem gagal menyimpan data pesanan. Coba lagi.");
+                        setIsProcessing(false);
+                        return;
+                    }
+
+                    // 3. 🔥 RESET TOMBOL BIAR GAK NYANGKUT KALAU USER KLIK BACK
+                    setIsProcessing(false);
+
+                    // Langsung lempar ke web bayar
+                    window.location.href = paymentUrl;
+                } else {
+                    showAlert("Pesanan berhasil dibuat! Tapi gagal mendapatkan link pembayaran dari server.");
+                    setIsProcessing(false);
+                }
             } else {
-                showAlert("Gagal memuat pembayaran: " + data.error);
+                showAlert("Gagal memuat pembayaran: " + (data.message || "Terjadi kesalahan"));
                 setIsProcessing(false);
             }
         } catch (error) {
             console.error(error);
-            showAlert("Terjadi kesalahan server saat menghubungi Midtrans.");
+            showAlert("Terjadi kesalahan server saat menghubungi API Pembayaran.");
             setIsProcessing(false);
         }
     };
@@ -156,9 +167,6 @@ function FormCheckout() {
 
     return (
         <div className="min-h-screen bg-[#fdfbf7] py-12 px-4 md:px-0">
-            <Script src="https://app.sandbox.midtrans.com/snap/snap.js" data-client-key={process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY} strategy="lazyOnload" />
-
-            {/* KOMPONEN CUSTOM ALERT MODAL */}
             {customAlert.show && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm">
                     <div className="bg-white border-4 border-gray-900 p-6 md:p-8 rounded-2xl shadow-[8px_8px_0_black] max-w-sm w-full transform transition-all scale-100">
@@ -168,7 +176,7 @@ function FormCheckout() {
                             </div>
                             <h3 className="text-2xl font-black text-gray-900 mb-2">Tunggu Sebentar!</h3>
                             <p className="text-gray-700 font-bold mb-6 leading-relaxed">{customAlert.message}</p>
-                            <button 
+                            <button
                                 onClick={() => setCustomAlert({ show: false, message: '', type: 'error' })}
                                 className="w-full bg-yellow-300 py-3 font-black text-lg border-4 border-gray-900 rounded-xl shadow-[4px_4px_0_black] hover:translate-y-1 hover:shadow-[2px_2px_0_black] active:translate-y-2 active:shadow-none transition-all"
                             >
@@ -239,19 +247,18 @@ function FormCheckout() {
                             </div>
                         </div>
 
-                        <p className="text-sm font-bold text-gray-500 mt-4 flex justify-center items-center gap-2">
+                        <p className="text-sm font-bold text-gray-500 mt-6 flex justify-center items-center gap-2">
                             <i className="fa-solid fa-shield-halved text-green-600"></i>
-                            Pembayaran diproses aman via Midtrans
+                            Pembayaran diproses aman via DompetX
                         </p>
 
-                        <button 
-                            type="submit" 
+                        <button
+                            type="submit"
                             disabled={isProcessing}
-                            className={`w-full py-3 md:py-4 mt-4 font-black text-xl md:text-2xl border-4 border-gray-900 transition-all rounded-xl ${
-                                isProcessing 
-                                ? 'bg-gray-400 opacity-70 cursor-not-allowed shadow-[3px_3px_0_black] translate-y-1' 
-                                : 'bg-yellow-300 shadow-[6px_6px_0_black] hover:translate-y-1 hover:shadow-[3px_3px_0_black] active:translate-y-2 active:shadow-none'
-                            }`}
+                            className={`w-full py-3 md:py-4 mt-4 font-black text-xl md:text-2xl border-4 border-gray-900 transition-all rounded-xl ${isProcessing
+                                    ? 'bg-gray-400 opacity-70 cursor-not-allowed shadow-[3px_3px_0_black] translate-y-1'
+                                    : 'bg-yellow-300 shadow-[6px_6px_0_black] hover:translate-y-1 hover:shadow-[3px_3px_0_black] active:translate-y-2 active:shadow-none'
+                                }`}
                         >
                             {isProcessing ? 'Memproses...' : 'Bayar Sekarang'}
                         </button>
