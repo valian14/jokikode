@@ -200,7 +200,7 @@ export default function JokiKode() {
           <div className="flex justify-between items-center h-20">
             <div className="flex-shrink-0 flex items-center gap-2 group">
               <i className="fa-solid fa-terminal text-3xl text-blue-600 transform -rotate-12 group-hover:rotate-0 transition-transform duration-300"></i>
-              <span className="font-handwriting text-4xl font-bold text-gray-900 tracking-wide">JokiKode.id</span>
+              <span className="font-handwriting text-4xl font-bold text-gray-900 tracking-wide">JokiKode</span>
             </div>
 
             {/* Desktop Menu */}
