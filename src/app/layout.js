@@ -14,6 +14,7 @@ export const metadata = {
     'joki tugas akhir it'
   ],
   authors: [{ name: 'JokiKode' }],
+  metadataBase: new URL('https://jokikode.vercel.app'),
   openGraph: {
     title: 'JokiKode - Jasa Joki Tugas Coding & UKK SMK',
     description: 'Biar urusan kodingan, database, dan error merah-merah kami yang kerjain. Fokus aja belajar presentasi!',
