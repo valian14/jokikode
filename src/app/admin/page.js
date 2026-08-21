@@ -3,6 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+// 🔥 Import SweetAlert2
+import Swal from 'sweetalert2';
 
 export default function AdminPage() {
     const router = useRouter();
@@ -15,11 +17,16 @@ export default function AdminPage() {
     const [newPromo, setNewPromo] = useState({ kode: '', diskon: 0 });
     const [editingKode, setEditingKode] = useState(null); 
 
+    const [paketList, setPaketList] = useState([]);
+    const [editingPaket, setEditingPaket] = useState(null);
+    const [newDiskonPaket, setNewDiskonPaket] = useState(0);
+
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
     useEffect(() => {
         fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const fetchData = async () => {
@@ -31,45 +38,40 @@ export default function AdminPage() {
 
         const { data: dataPesanan } = await supabase.from('pesanan').select('*').order('created_at', { ascending: false });
         const { data: dataPromo } = await supabase.from('promo').select('*');
+        const { data: dataPaket } = await supabase.from('paket_harga').select('*').order('harga_asli', { ascending: true });
 
         if (dataPesanan) setPesanan(dataPesanan);
         if (dataPromo) setPromoList(dataPromo);
+        if (dataPaket) setPaketList(dataPaket);
         setLoading(false);
     };
 
+    // --- FUNGSI PROMO ---
     const submitPromo = async () => {
-        if (!newPromo.kode || newPromo.diskon <= 0) return alert("Isi kode dan diskon!");
+        if (!newPromo.kode || newPromo.diskon <= 0) {
+            return Swal.fire('Oops...', 'Isi kode dan diskon dulu bos!', 'warning');
+        }
         
         const kodeUpper = newPromo.kode.toUpperCase();
 
         if (editingKode) {
-            // PROSES UPDATE
-            const { error } = await supabase
-                .from('promo')
-                .update({ diskon: newPromo.diskon })
-                .eq('kode', editingKode); 
-
+            const { error } = await supabase.from('promo').update({ diskon: newPromo.diskon }).eq('kode', editingKode); 
             if (error) {
-                alert("Gagal update promo: " + error.message);
+                Swal.fire('Gagal!', "Gagal update promo: " + error.message, 'error');
             } else {
-                alert("Promo berhasil diupdate!");
+                Swal.fire('Sukses!', 'Promo berhasil diupdate!', 'success');
             }
         } else {
-            // Cek duplikasi kode promo
             const isExist = promoList.find(p => p.kode === kodeUpper);
             if (isExist) {
-                return alert(`Promo dengan kode ${kodeUpper} sudah ada! Gunakan kode lain.`);
+                return Swal.fire('Peringatan!', `Promo dengan kode ${kodeUpper} sudah ada! Gunakan kode lain.`, 'warning');
             }
 
-            // PROSES INSERT
-            const { error } = await supabase.from('promo').insert([
-                { kode: kodeUpper, diskon: newPromo.diskon, is_active: true }
-            ]);
-
+            const { error } = await supabase.from('promo').insert([{ kode: kodeUpper, diskon: newPromo.diskon, is_active: true }]);
             if (error) {
-                alert("Gagal menambah promo: " + error.message);
+                Swal.fire('Gagal!', "Gagal menambah promo: " + error.message, 'error');
             } else {
-                alert("Promo berhasil dibuat!");
+                Swal.fire('Mantap!', 'Promo berhasil dibuat!', 'success');
             }
         }
         
@@ -79,26 +81,80 @@ export default function AdminPage() {
     };
 
     const hapusPromo = async (kode) => {
-        if (!confirm(`Yakin ingin menghapus promo ${kode}?`)) return;
+        const result = await Swal.fire({
+            title: 'Yakin hapus promo?',
+            text: `Promo ${kode} bakal dihapus permanen!`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Ya, Hapus!',
+            cancelButtonText: 'Batal'
+        });
+
+        if (!result.isConfirmed) return;
         
         const { error } = await supabase.from('promo').delete().eq('kode', kode);
+        if (error) {
+            Swal.fire('Error!', "Gagal menghapus promo: " + error.message, 'error');
+        } else {
+            Swal.fire('Terhapus!', 'Promo berhasil dihapus.', 'success');
+            fetchData();
+        }
+    };
+
+    // --- FUNGSI DISKON PAKET ---
+    const submitDiskonPaket = async () => {
+        if (!editingPaket) return;
+        
+        const { error } = await supabase
+            .from('paket_harga')
+            .update({ diskon_persen: newDiskonPaket })
+            .eq('id_paket', editingPaket);
         
         if (error) {
-            alert("Gagal menghapus promo: " + error.message);
+            Swal.fire('Error!', "Gagal update diskon paket: " + error.message, 'error');
         } else {
+            Swal.fire('Sukses!', `Diskon paket ${editingPaket.toUpperCase()} berhasil diupdate jadi ${newDiskonPaket}%!`, 'success');
+            setEditingPaket(null);
+            setNewDiskonPaket(0);
             fetchData();
         }
     };
 
     const handleLogout = async () => {
-        await supabase.auth.signOut();
-        router.push('/login');
+        const result = await Swal.fire({
+            title: 'Keluar?',
+            text: "Yakin mau logout dari admin?",
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Ya, Logout'
+        });
+
+        if (result.isConfirmed) {
+            await supabase.auth.signOut();
+            router.push('/login');
+        }
     };
 
     const updateStatus = async (id, newStatus) => {
         const { error } = await supabase.from('pesanan').update({ status: newStatus }).eq('id', id);
-        if (error) alert("Gagal update status!");
-        else fetchData();
+        if (error) {
+            Swal.fire('Gagal!', 'Gagal update status pesanan!', 'error');
+        } else {
+            // Notifikasi kecil (Toast) biar nggak ganggu saat ubah status
+            Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon: 'success',
+                title: 'Status berhasil diubah',
+                showConfirmButton: false,
+                timer: 1500
+            });
+            fetchData();
+        }
     };
 
     const indexOfLastItem = currentPage * itemsPerPage;
@@ -126,7 +182,7 @@ export default function AdminPage() {
             </nav>
 
             <div className="max-w-7xl mx-auto p-4 md:p-8 mt-4">
-                <div className="flex gap-4 mb-8">
+                <div className="flex flex-wrap gap-4 mb-8">
                     <button 
                         onClick={() => setActiveTab('pesanan')} 
                         className={`px-6 py-3 border-4 border-gray-900 rounded-xl font-black shadow-[4px_4px_0_black] transition-colors ${activeTab === 'pesanan' ? 'bg-blue-300' : 'bg-white hover:bg-gray-100'}`}
@@ -137,10 +193,17 @@ export default function AdminPage() {
                         onClick={() => setActiveTab('promo')} 
                         className={`px-6 py-3 border-4 border-gray-900 rounded-xl font-black shadow-[4px_4px_0_black] transition-colors ${activeTab === 'promo' ? 'bg-green-300' : 'bg-white hover:bg-gray-100'}`}
                     >
-                         Kelola Promo
+                         🎟️ Kelola Promo
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('diskon')} 
+                        className={`px-6 py-3 border-4 border-gray-900 rounded-xl font-black shadow-[4px_4px_0_black] transition-colors ${activeTab === 'diskon' ? 'bg-pink-300' : 'bg-white hover:bg-gray-100'}`}
+                    >
+                         🏷️ Kelola Diskon Paket
                     </button>
                 </div>
 
+                {/* TAB PESANAN */}
                 {activeTab === 'pesanan' && (
                     <div>
                         <div className="flex justify-between items-end mb-8">
@@ -208,6 +271,7 @@ export default function AdminPage() {
                     </div>
                 )}
 
+                {/* TAB PROMO */}
                 {activeTab === 'promo' && (
                     <div className="mb-12">
                         <h2 className="text-3xl font-black text-gray-900 mb-6">
@@ -280,6 +344,85 @@ export default function AdminPage() {
                                                             className="bg-red-400 px-4 py-1 border-2 border-gray-900 font-bold rounded-lg shadow-[2px_2px_0_black] hover:translate-y-[2px] hover:shadow-none transition-all"
                                                         >
                                                             Hapus
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* TAB DISKON PAKET */}
+                {activeTab === 'diskon' && (
+                    <div className="mb-12">
+                        <h2 className="text-3xl font-black text-gray-900 mb-6">
+                            🏷️ {editingPaket ? `Edit Diskon Paket ${editingPaket.toUpperCase()}` : 'Daftar Diskon Paket'}
+                        </h2>
+                        
+                        {editingPaket && (
+                            <div className="bg-white border-4 border-gray-900 rounded-2xl p-6 shadow-[8px_8px_0_black] mb-8 bg-pink-50">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="flex items-center gap-4">
+                                        <label className="font-bold whitespace-nowrap">Diskon Baru (%):</label>
+                                        <input 
+                                            type="number" placeholder="Contoh: 15"
+                                            value={newDiskonPaket}
+                                            className="w-full p-3 border-4 border-gray-900 rounded-xl font-bold"
+                                            onChange={(e) => setNewDiskonPaket(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button 
+                                            onClick={submitDiskonPaket}
+                                            className="w-full bg-pink-400 border-4 border-gray-900 rounded-xl font-black hover:bg-pink-500 transition-all active:translate-y-1 text-gray-900"
+                                        >
+                                            Simpan Diskon
+                                        </button>
+                                        <button 
+                                            onClick={() => {setEditingPaket(null); setNewDiskonPaket(0)}}
+                                            className="bg-gray-300 border-4 border-gray-900 rounded-xl font-black px-4 hover:bg-gray-400 transition-all active:translate-y-1"
+                                        >
+                                            Batal
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="bg-white border-4 border-gray-900 rounded-2xl overflow-hidden shadow-[8px_8px_0_black]">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-pink-300 border-b-4 border-gray-900 text-lg">
+                                            <th className="p-4 font-black text-gray-900 border-r-4 border-gray-900">Nama Paket</th>
+                                            <th className="p-4 font-black text-gray-900 border-r-4 border-gray-900">Harga Asli</th>
+                                            <th className="p-4 font-black text-gray-900 border-r-4 border-gray-900">Diskon Aktif</th>
+                                            <th className="p-4 font-black text-gray-900">Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {paketList.length === 0 ? (
+                                            <tr>
+                                                <td colSpan="4" className="p-10 text-center font-bold text-gray-500">Data paket belum tersedia di database.</td>
+                                            </tr>
+                                        ) : (
+                                            paketList.map((paket) => (
+                                                <tr key={paket.id_paket} className="border-b-4 border-gray-900 last:border-b-0 hover:bg-pink-50 transition-colors">
+                                                    <td className="p-4 font-black border-r-4 border-gray-900 uppercase text-gray-800">{paket.id_paket}</td>
+                                                    <td className="p-4 font-bold border-r-4 border-gray-900">Rp {paket.harga_asli?.toLocaleString('id-ID')}</td>
+                                                    <td className="p-4 font-black text-xl text-green-600 border-r-4 border-gray-900">
+                                                        {paket.diskon_persen}%
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <button 
+                                                            onClick={() => { setEditingPaket(paket.id_paket); setNewDiskonPaket(paket.diskon_persen); }}
+                                                            className="bg-blue-300 px-6 py-2 border-2 border-gray-900 font-bold rounded-lg shadow-[2px_2px_0_black] hover:translate-y-[2px] hover:shadow-none transition-all text-gray-900"
+                                                        >
+                                                            Ubah Diskon
                                                         </button>
                                                     </td>
                                                 </tr>

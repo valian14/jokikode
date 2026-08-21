@@ -2,13 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase'; // Koneksi tunggal yang aman
-
-const KATALOG_PAKET = {
-    'hemat': { nama: 'Tolongin Bang', harga: 75000 },
-    'standar': { nama: 'Terima Beres', harga: 250000 },
-    'sultan': { nama: 'Nilai A+', harga: 350000 }
-};
+import { supabase } from '@/lib/supabase'; 
 
 function FormCheckout() {
     const searchParams = useSearchParams();
@@ -19,18 +13,52 @@ function FormCheckout() {
     const [promoTerpakai, setPromoTerpakai] = useState('');
     const [pesanDiskon, setPesanDiskon] = useState('');
     const [totalHarga, setTotalHarga] = useState(0);
+    const [hargaAsliDatabase, setHargaAsliDatabase] = useState(0);
+    const [diskonPaketPersen, setDiskonPaketPersen] = useState(0);
     const [formData, setFormData] = useState({ nama: '', wa: '', detail: '' });
-
-    // 🔥 Baris metodeBayar udah gue hapus karena udah gak kepake
 
     const [customAlert, setCustomAlert] = useState({ show: false, message: '', type: 'error' });
     const [isProcessing, setIsProcessing] = useState(false);
 
     useEffect(() => {
-        if (paketUrl && KATALOG_PAKET[paketUrl]) {
-            setPaketTerpilih(KATALOG_PAKET[paketUrl]);
-            setTotalHarga(KATALOG_PAKET[paketUrl].harga);
-        }
+        const fetchPaketDariSupabase = async () => {
+            if (!paketUrl) return;
+
+            const { data, error } = await supabase
+                .from('paket_harga')
+                .select('*')
+                .eq('id_paket', paketUrl)
+                .single();
+
+            if (data && !error) {
+                const hargaAsli = data.harga_asli;
+                const diskonPersen = data.diskon_persen || 0;
+                
+                const potongDiskon = (hargaAsli * diskonPersen) / 100;
+                const hargaFinalPaket = hargaAsli - potongDiskon;
+
+                setPaketTerpilih({
+                    nama: paketUrl === 'hemat' ? 'Tolongin Bang' : paketUrl === 'standar' ? 'Terima Beres' : 'Nilai A+',
+                    harga: hargaFinalPaket
+                });
+                setHargaAsliDatabase(hargaAsli);
+                setDiskonPaketPersen(diskonPersen);
+                setTotalHarga(hargaFinalPaket);
+            } else {
+                const fallbackData = {
+                    'hemat': { nama: 'Tolongin Bang', harga: 75000 },
+                    'standar': { nama: 'Terima Beres', harga: 250000 },
+                    'sultan': { nama: 'Nilai A+', harga: 350000 }
+                };
+                if (fallbackData[paketUrl]) {
+                    setPaketTerpilih(fallbackData[paketUrl]);
+                    setHargaAsliDatabase(fallbackData[paketUrl].harga);
+                    setTotalHarga(fallbackData[paketUrl].harga);
+                }
+            }
+        };
+
+        fetchPaketDariSupabase();
     }, [paketUrl]);
 
     const showAlert = (message, type = 'error') => {
@@ -39,9 +67,18 @@ function FormCheckout() {
 
     const handleCekPromo = async () => {
         if (!paketTerpilih) return;
+        
+        // 🔥 VALIDASI: Cegah Double Diskon
+        if (diskonPaketPersen > 0) {
+            setPesanDiskon('❌ Promo tidak dapat digabung dengan diskon paket.');
+            return;
+        }
+
         const inputBersih = kodePromo.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+        const hargaAcuan = hargaAsliDatabase - (hargaAsliDatabase * diskonPaketPersen / 100);
+
         if (!inputBersih) {
-            setTotalHarga(paketTerpilih.harga);
+            setTotalHarga(hargaAcuan);
             setPesanDiskon('');
             setPromoTerpakai('');
             return;
@@ -63,16 +100,16 @@ function FormCheckout() {
         }
 
         if (!promoDitemukan) {
-            setTotalHarga(paketTerpilih.harga);
+            setTotalHarga(hargaAcuan);
             setPromoTerpakai('');
             setPesanDiskon('❌ Kode promo tidak valid.');
         } else if (promoDitemukan.is_active !== true) {
-            setTotalHarga(paketTerpilih.harga);
+            setTotalHarga(hargaAcuan);
             setPromoTerpakai('');
             setPesanDiskon('❌ Kode promo sudah tidak aktif.');
         } else {
-            const diskonPersen = promoDitemukan.diskon / 100;
-            setTotalHarga(paketTerpilih.harga - (paketTerpilih.harga * diskonPersen));
+            const diskonPromoPersen = promoDitemukan.diskon / 100;
+            setTotalHarga(hargaAcuan - (hargaAcuan * diskonPromoPersen));
             setPromoTerpakai(promoDitemukan.kode);
             setPesanDiskon(`✅ Mantap! Diskon ${promoDitemukan.diskon}% diterapkan.`);
         }
@@ -88,11 +125,9 @@ function FormCheckout() {
         if (isProcessing) return;
         setIsProcessing(true);
 
-        // 1. Bikin Order ID di awal biar konsisten buat DompetX dan Database
         const currentOrderId = 'JOKI-' + Date.now();
 
         try {
-            // Tembak API DompetX buat minta Link Pembayaran
             const response = await fetch('/api/checkout', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -113,17 +148,14 @@ function FormCheckout() {
                 const paymentUrl = data.paymentData.payment_url;
 
                 if (paymentUrl) {
-
-                    // 2. 🔥 SIMPAN KE DATABASE (SUPABASE) SEBELUM REDIRECT
-                    // Sesuaikan nama kolom ('id_pesanan', 'nama', dll) sama tabel di Supabase lu ya ngab!
                     const { error: dbError } = await supabase.from('pesanan').insert([{
                         order_id: currentOrderId,
                         nama_klien: formData.nama,
                         wa_klien: formData.wa,
-                        paket_id: paketUrl, // nyimpen 'hemat', 'standar', atau 'sultan'
-                        kode_promo: promoTerpakai || null, // Kasih null kalau kosong
+                        paket_id: paketUrl,
+                        kode_promo: promoTerpakai || null,
                         total_harga: totalHarga,
-                        status: 'PENDING' // Set otomatis jadi PENDING
+                        status: 'PENDING'
                     }]);
 
                     if (dbError) {
@@ -133,10 +165,7 @@ function FormCheckout() {
                         return;
                     }
 
-                    // 3. 🔥 RESET TOMBOL BIAR GAK NYANGKUT KALAU USER KLIK BACK
                     setIsProcessing(false);
-
-                    // Langsung lempar ke web bayar
                     window.location.href = paymentUrl;
                 } else {
                     showAlert("Pesanan berhasil dibuat! Tapi gagal mendapatkan link pembayaran dari server.");
@@ -201,8 +230,8 @@ function FormCheckout() {
                             <h3 className="text-xl md:text-2xl font-black text-blue-600">{paketTerpilih.nama}</h3>
                             <div className="text-right">
                                 <p className="text-xl md:text-3xl font-black text-nowrap">Rp {totalHarga.toLocaleString('id-ID')}</p>
-                                {totalHarga !== paketTerpilih.harga && (
-                                    <p className="text-xs md:text-sm text-gray-500 line-through mt-1">Rp {paketTerpilih.harga.toLocaleString('id-ID')}</p>
+                                {(diskonPaketPersen > 0 || totalHarga !== hargaAsliDatabase) && (
+                                    <p className="text-xs md:text-sm text-gray-500 line-through mt-1">Rp {hargaAsliDatabase.toLocaleString('id-ID')}</p>
                                 )}
                             </div>
                         </div>
@@ -225,6 +254,7 @@ function FormCheckout() {
                                 <textarea required rows="3" value={formData.detail} onChange={e => setFormData({ ...formData, detail: e.target.value })} className="w-full p-3 border-4 border-gray-900 rounded-xl bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all font-medium" placeholder="Misal: Disuruh bikin web kasir pakai Laravel..."></textarea>
                             </div>
 
+                            {/* 🔥 BAGIAN VALIDASI DISABLE INPUT & BUTTON */}
                             <div>
                                 <label className="block font-bold text-gray-900 mb-2">Punya Kode Diskon?</label>
                                 <div className="flex gap-2">
@@ -232,18 +262,25 @@ function FormCheckout() {
                                         type="text"
                                         value={kodePromo}
                                         onChange={e => setKodePromo(e.target.value)}
-                                        className="w-full p-3 border-4 border-gray-900 rounded-xl uppercase font-bold bg-white focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all"
-                                        placeholder="KETIK KODE..."
+                                        disabled={diskonPaketPersen > 0} 
+                                        className={`w-full p-3 border-4 border-gray-900 rounded-xl uppercase font-bold focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all ${diskonPaketPersen > 0 ? 'bg-gray-200 cursor-not-allowed placeholder-gray-500' : 'bg-white'}`}
+                                        placeholder={diskonPaketPersen > 0 ? "TIDAK BERLAKU SAAT DISKON PAKET" : "KETIK KODE..."}
                                     />
                                     <button
                                         type="button"
                                         onClick={handleCekPromo}
-                                        className="bg-gray-900 text-white px-6 py-2 rounded-xl font-bold hover:bg-gray-800 transition-colors"
+                                        disabled={diskonPaketPersen > 0}
+                                        className={`px-6 py-2 rounded-xl font-bold transition-colors ${diskonPaketPersen > 0 ? 'bg-gray-400 text-gray-700 border-4 border-gray-900 cursor-not-allowed' : 'bg-gray-900 text-white hover:bg-gray-800'}`}
                                     >
                                         Cek
                                     </button>
                                 </div>
-                                {pesanDiskon && <p className={`mt-2 text-sm font-bold ${pesanDiskon.includes('✅') ? 'text-green-600' : 'text-red-600'}`}>{pesanDiskon}</p>}
+                                {/* Peringatan warna merah kalau ada diskon paket */}
+                                {diskonPaketPersen > 0 ? (
+                                    <p className="mt-2 text-sm font-bold text-red-600">❌ Promo tidak dapat digabung dengan diskon paket.</p>
+                                ) : (
+                                    pesanDiskon && <p className={`mt-2 text-sm font-bold ${pesanDiskon.includes('✅') ? 'text-green-600' : 'text-red-600'}`}>{pesanDiskon}</p>
+                                )}
                             </div>
                         </div>
 

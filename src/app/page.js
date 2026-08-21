@@ -3,8 +3,9 @@ import React, { useState } from 'react';
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { supabase } from '@/lib/supabase'; // Sesuaikan lokasi file supabase lu!
 
-// Fungsi Fetch dengan Retry (Diletakkan di luar komponen agar tidak ter-recreate setiap render)
+// Fungsi Fetch dengan Retry
 const fetchWithRetry = async (url, options, maxRetries = 3) => {
   const delays = [1000, 2000, 4000];
   for (let i = 0; i < maxRetries; i++) {
@@ -28,7 +29,7 @@ const fetchWithRetry = async (url, options, maxRetries = 3) => {
   }
 };
 
-// Format Markdown to HTML (Sesuai source)
+// Format Markdown to HTML
 const formatMarkdownToHTML = (text) => {
   let html = text
     .replace(/\*\*(.*?)\*\*/g, '<strong class="text-black bg-yellow-200 px-1">$1</strong>')
@@ -52,6 +53,63 @@ export default function JokiKode() {
   const toggleMobileMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen);
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
+  // State Data Harga & Diskon
+  const [hargaPaket, setHargaPaket] = useState({
+    hemat: { harga_asli: 75000, diskon_persen: 0 },
+    standar: { harga_asli: 250000, diskon_persen: 0 },
+    sultan: { harga_asli: 350000, diskon_persen: 0 }
+  });
+
+  // Fetch awal & Subscribe Realtime dari Supabase
+  useEffect(() => {
+    // 1. Ambil data awal pas halaman baru dimuat
+    const ambilHarga = async () => {
+      try {
+        const { data, error } = await supabase.from('paket_harga').select('*');
+        if (data && !error) {
+          const formatHarga = { ...hargaPaket };
+          data.forEach(item => {
+            if (formatHarga[item.id_paket]) {
+              formatHarga[item.id_paket] = item;
+            }
+          });
+          setHargaPaket(formatHarga);
+        }
+      } catch (err) {
+        console.error("Gagal ambil harga dari Supabase:", err);
+      }
+    };
+    ambilHarga();
+
+    // 2. 🔥 Mulai nge-subscribe (nguping) perubahan data secara REAL-TIME
+    const channel = supabase
+      .channel('realtime-paket-harga')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'paket_harga' },
+        (payload) => {
+          const dataBaru = payload.new;
+          // Langsung update state harga dengan data baru dari admin
+          setHargaPaket((hargaLama) => ({
+            ...hargaLama,
+            [dataBaru.id_paket]: dataBaru
+          }));
+        }
+      )
+      .subscribe();
+
+    // Cleanup saat user pindah halaman
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Fungsi Hitung Diskon
+  const hitungDiskon = (harga, diskon) => {
+    return harga - (harga * diskon / 100);
+  };
+
   // Fungsi Pemanggil AI
   const handleAnalyzeTask = async () => {
     const userQuery = aiInput.trim();
@@ -63,7 +121,6 @@ export default function JokiKode() {
     setIsAiLoading(true);
 
     try {
-      // 1. Memanggil API Backend lokal yang tadi kita buat
       const response = await fetch('/api/bedah-soal', {
         method: 'POST',
         headers: {
@@ -78,13 +135,11 @@ export default function JokiKode() {
         throw new Error(data.error || "Gagal memproses soal dari server internal.");
       }
 
-      // 2. Mengambil hasil dari backend dan memformatnya
       const rawText = data.result || "Maaf, AI kami sedang pusing baca kodingan. Coba lagi nanti ya!";
       setAiOutput(formatMarkdownToHTML(rawText));
 
     } catch (error) {
       console.error("AI Error:", error);
-      // 3. Menampilkan UI error bawaanmu
       setAiOutput(`<div class="text-red-600 font-bold text-center mt-4 p-4 border-2 border-dashed border-red-500 bg-red-50 rounded">
         <i class="fa-solid fa-triangle-exclamation text-red-500 text-2xl mb-2 block"></i>
         <b>Gagal Terhubung ke AI:</b><br/>${error.message}<br/><br/>
@@ -97,13 +152,9 @@ export default function JokiKode() {
 
   const handleScroll = (e, id, path) => {
     e.preventDefault();
-
     const element = document.getElementById(id);
     if (element) {
-      // 1. Gulir mulus ke elemen tujuan
       element.scrollIntoView({ behavior: 'smooth' });
-
-      // 2. Ubah URL di address bar (tanpa reload dan tanpa #)
       window.history.pushState(null, '', `/${path}`);
     }
   };
@@ -111,14 +162,10 @@ export default function JokiKode() {
   const pathname = usePathname();
 
   useEffect(() => {
-    // 1. Ambil kata setelah garis miring. Contoh: '/fitur' bakal jadi 'fitur'
     const idDariUrl = pathname.replace('/', ''); 
-
-    // 2. Kalau ada isinya (bukan halaman utama '/'), cari elemennya
     if (idDariUrl) {
       const element = document.getElementById(idDariUrl);
       if (element) {
-        // 3. Kasih jeda dikit (100ms) biar HTML-nya selesai di-render semua, baru gulir
         setTimeout(() => {
           element.scrollIntoView({ behavior: 'smooth' });
         }, 100);
@@ -129,7 +176,6 @@ export default function JokiKode() {
   return (
     <div className="paper-bg antialiased selection:bg-yellow-300 selection:text-black min-h-screen">
 
-      {/* CSS internal khusus komponen ini */}
       <style dangerouslySetInnerHTML={{
         __html: `
         .font-handwriting { font-family: 'Caveat', cursive; }
@@ -212,7 +258,6 @@ export default function JokiKode() {
               <a href="#paket-harga" onClick={(e) => handleScroll(e, 'paket-harga', 'paket-harga')}
                 className="font-bold hover:text-blue-600 cursor-pointer">Paket Harga</a>
 
-              {/* Menu Cek Order Baru */}
               <Link href="/cek-order" className="font-bold text-gray-700 hover:text-blue-600 transition-colors border-b-2 border-transparent hover:border-blue-600">
                 Cek Order 🔍
               </Link>
@@ -252,7 +297,6 @@ export default function JokiKode() {
           <a href="#ai-analyzer" onClick={closeMobileMenu} className="block px-3 py-2 text-lg font-bold text-gray-900 border-l-4 border-transparent hover:border-blue-500 hover:bg-gray-100 transition-colors">Bedah Soal</a>
           <a href="#harga" onClick={closeMobileMenu} className="block px-3 py-2 text-lg font-bold text-gray-900 border-l-4 border-transparent hover:border-blue-500 hover:bg-gray-100 transition-colors">Paket Harga</a>
 
-          {/* Menu Cek Order Baru untuk Mobile */}
           <Link href="/cek-order" onClick={closeMobileMenu} className="block px-3 py-2 text-lg font-bold text-gray-900 border-l-4 border-transparent hover:border-blue-500 hover:bg-gray-100 transition-colors">
             Cek Order 🔍
           </Link>
@@ -490,12 +534,30 @@ export default function JokiKode() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-10 max-w-6xl mx-auto items-stretch">
 
             {/* Package 1 */}
-            <div className="card-sketch p-8 bg-white md:mb-4">
+            <div className="card-sketch p-8 bg-white md:mb-4 relative">
+              {hargaPaket.hemat.diskon_persen > 0 && (
+                <div className="absolute -top-4 -left-4 z-20">
+                  <span className="bg-green-400 text-gray-900 font-black px-3 py-1 border-2 border-black shadow-[2px_2px_0px_black] transform -rotate-6 inline-block transition-all">
+                    Diskon {hargaPaket.hemat.diskon_persen}%
+                  </span>
+                </div>
+              )}
+
               <div className="inline-block px-3 py-1 border-2 border-gray-900 font-bold text-xs uppercase mb-4 shadow-[2px_2px_0px_black]">Paket Hemat</div>
               <h3 className="text-2xl font-black mb-2">Tolongin Bang</h3>
               <p className="text-gray-600 text-sm mb-6 font-medium border-b-2 border-dashed border-gray-300 pb-4">Cocok untuk project UKK skala kecil / sederhana.</p>
 
-              <div className="text-4xl font-black mb-6">Mulai 75k<span className="text-lg text-gray-500 font-medium">/app</span></div>
+              <div className="mb-6">
+                {hargaPaket.hemat.diskon_persen > 0 && (
+                  <div className="text-gray-500 line-through text-lg font-bold decoration-2">
+                    Rp {hargaPaket.hemat.harga_asli.toLocaleString('id-ID')}
+                  </div>
+                )}
+                <div className="text-4xl font-black transition-all">
+                  Mulai {hitungDiskon(hargaPaket.hemat.harga_asli, hargaPaket.hemat.diskon_persen) / 1000}k
+                  <span className="text-lg text-gray-500 font-medium">/app</span>
+                </div>
+              </div>
 
               <ul className="space-y-4 mb-8 font-medium">
                 <li className="flex items-start gap-3">
@@ -527,11 +589,29 @@ export default function JokiKode() {
                 <span className="bg-red-500 text-white font-bold px-3 py-1 border-2 border-black shadow-[2px_2px_0px_black] transform rotate-12 inline-block">Best Seller!</span>
               </div>
 
+              {hargaPaket.standar.diskon_persen > 0 && (
+                <div className="absolute -top-4 -left-4 z-20">
+                  <span className="bg-green-400 text-gray-900 font-black px-3 py-1 border-2 border-black shadow-[2px_2px_0px_black] transform -rotate-6 inline-block transition-all">
+                    Diskon {hargaPaket.standar.diskon_persen}%
+                  </span>
+                </div>
+              )}
+
               <div className="inline-block px-3 py-1 bg-white border-2 border-gray-900 font-bold text-xs uppercase mb-4 shadow-[2px_2px_0px_black]">Paket Standar</div>
               <h3 className="text-3xl font-black mb-2">Terima Beres</h3>
               <p className="text-gray-700 text-sm mb-6 font-bold border-b-2 border-dashed border-gray-400 pb-4">Paket paling aman untuk standar lulus UKK.</p>
 
-              <div className="text-4xl font-black mb-6">Mulai 250k<span className="text-lg text-gray-700 font-medium">/app</span></div>
+              <div className="mb-6">
+                {hargaPaket.standar.diskon_persen > 0 && (
+                  <div className="text-gray-500 line-through text-lg font-bold decoration-2">
+                    Rp {hargaPaket.standar.harga_asli.toLocaleString('id-ID')}
+                  </div>
+                )}
+                <div className="text-4xl font-black transition-all">
+                  Mulai {hitungDiskon(hargaPaket.standar.harga_asli, hargaPaket.standar.diskon_persen) / 1000}k
+                  <span className="text-lg text-gray-700 font-medium">/app</span>
+                </div>
+              </div>
 
               <ul className="space-y-4 mb-8 font-bold">
                 <li className="flex items-start gap-3">
@@ -558,12 +638,30 @@ export default function JokiKode() {
             </div>
 
             {/* Package 3 */}
-            <div className="card-sketch p-8 bg-blue-50 md:mb-4">
+            <div className="card-sketch p-8 bg-blue-50 md:mb-4 relative">
+              {hargaPaket.sultan.diskon_persen > 0 && (
+                <div className="absolute -top-4 -left-4 z-20">
+                  <span className="bg-green-400 text-gray-900 font-black px-3 py-1 border-2 border-black shadow-[2px_2px_0px_black] transform -rotate-6 inline-block transition-all">
+                    Diskon {hargaPaket.sultan.diskon_persen}%
+                  </span>
+                </div>
+              )}
+
               <div className="inline-block px-3 py-1 bg-white border-2 border-gray-900 font-bold text-xs uppercase mb-4 shadow-[2px_2px_0px_black]">Paket Sultan</div>
               <h3 className="text-2xl font-black mb-2">Nilai A+</h3>
               <p className="text-gray-600 text-sm mb-6 font-medium border-b-2 border-dashed border-gray-300 pb-4">Untuk yang ngincer nilai sempurna & UI mewah.</p>
 
-              <div className="text-4xl font-black mb-6">Mulai 350k<span className="text-lg text-gray-500 font-medium">/app</span></div>
+              <div className="mb-6">
+                {hargaPaket.sultan.diskon_persen > 0 && (
+                  <div className="text-gray-500 line-through text-lg font-bold decoration-2">
+                    Rp {hargaPaket.sultan.harga_asli.toLocaleString('id-ID')}
+                  </div>
+                )}
+                <div className="text-4xl font-black transition-all">
+                  Mulai {hitungDiskon(hargaPaket.sultan.harga_asli, hargaPaket.sultan.diskon_persen) / 1000}k
+                  <span className="text-lg text-gray-500 font-medium">/app</span>
+                </div>
+              </div>
 
               <ul className="space-y-4 mb-8 font-medium">
                 <li className="flex items-start gap-3">
